@@ -1,0 +1,14 @@
+name: Lab1 Workflow
+
+on:
+  push:
+
+jobs:
+  mi-primer-job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mensaje personalizado
+        run: echo "Hola! Este es mi primer workflow de GitHub Actions"
+
+      - name: Listar contenido del repositorio
+        run: ls -la
