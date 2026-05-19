@@ -1,0 +1,109 @@
+# .github/workflows/reusable-node.yml
+name: Reusable Node.js Pipeline
+
+on:
+  workflow_call:                        # ← Esto lo hace reutilizable
+    inputs:
+      node-version:
+        description: 'Versión de Node.js a usar'
+        required: false
+        type: string
+        default: '20'
+      working-directory:
+        description: 'Directorio de trabajo'
+        required: false
+        type: string
+        default: '.'
+      artifact-name:
+        description: 'Nombre base para los artifacts'
+        required: true
+        type: string
+      retention-days:
+        description: 'Días de retención de artifacts'
+        required: false
+        type: number
+        default: 7
+
+    outputs:                            # ← Outputs que devuelve al caller
+      test-result:
+        description: 'Resultado de los tests (passed/failed)'
+        value: ${{ jobs.build-and-test.outputs.test-result }}
+      artifact-id:
+        description: 'ID del artifact generado'
+        value: ${{ jobs.build-and-test.outputs.artifact-id }}
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+
+    outputs:
+      test-result: ${{ steps.run-tests.outputs.result }}
+      artifact-id: ${{ steps.upload-build.outputs.artifact-id }}
+
+    steps:
+      # ── Parte 5: versión fijada por SHA, no flotante ──────────────────
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Setup Node.js ${{ inputs.node-version }}
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af  # v4.1.0
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      # ── Parte 2: Cache de dependencias ───────────────────────────────
+      # Clave: SO + versión Node + hash del lockfile → evita colisiones
+      - name: Cache node_modules
+        id: cache-deps
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c6158d  # v4.2.0
+        with:
+          path: ${{ inputs.working-directory }}/node_modules
+          key: ${{ runner.os }}-node${{ inputs.node-version }}-${{ hashFiles('**/package-lock.json', '**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-node${{ inputs.node-version }}-
+
+      - name: Install dependencies
+        if: steps.cache-deps.outputs.cache-hit != 'true'
+        run: npm ci
+
+      # ── Parte 1: Build ────────────────────────────────────────────────
+      - name: Build
+        run: npm run build
+
+      # ── Parte 1 + 3: Tests con reporte ───────────────────────────────
+      - name: Run tests
+        id: run-tests
+        run: |
+          set +e
+          npm test -- --reporter=tap > test-report.tap 2>&1
+          EXIT_CODE=$?
+          cat test-report.tap
+          if [ $EXIT_CODE -eq 0 ]; then
+            echo "result=passed" >> $GITHUB_OUTPUT
+          else
+            echo "result=failed" >> $GITHUB_OUTPUT
+          fi
+          exit $EXIT_CODE
+
+      # ── Parte 3: Artifact — build compilado ──────────────────────────
+      - name: Upload build artifact
+        id: upload-build
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08  # v4.6.0
+        with:
+          name: ${{ inputs.artifact-name }}-build-node${{ inputs.node-version }}
+          path: ${{ inputs.working-directory }}/dist/
+          retention-days: ${{ inputs.retention-days }}
+          if-no-files-found: warn
+
+      # ── Parte 3: Artifact — reporte de tests ─────────────────────────
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08  # v4.6.0
+        with:
+          name: ${{ inputs.artifact-name }}-test-report-node${{ inputs.node-version }}
+          path: ${{ inputs.working-directory }}/test-report.tap
+          retention-days: ${{ inputs.retention-days }}
+          if-no-files-found: warn
