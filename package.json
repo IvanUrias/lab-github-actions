@@ -1,0 +1,9 @@
+{
+  "name": "lab2-reusable",
+  "version": "1.0.0",
+  "scripts": {
+    "test": "node --test",
+    "build": "mkdir -p dist && cp src/index.js dist/index.js"
+  },
+  "devDependencies": {}
+}
