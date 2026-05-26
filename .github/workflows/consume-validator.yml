@@ -1,0 +1,25 @@
+name: Consume Branch Validator
+
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+jobs:
+  validate-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validar nombre de rama actual
+        id: check
+        uses: IvanUrias/branch-validator-action@v1.0.0
+        with:
+          branch_name: ${{ github.ref_name }}
+        continue-on-error: true
+
+      - name: Mostrar resultado
+        run: |
+          echo "Rama: ${{ github.ref_name }}"
+          echo "¿Válida?: ${{ steps.check.outputs.is_valid }}"
+          echo "Normalizada: ${{ steps.check.outputs.normalized_name }}"
